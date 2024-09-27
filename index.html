@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual P2P Connection</title>
+    <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+    <style>
+        video {
+            width: 300px;
+            height: 200px;
+            border: 1px solid black;
+            margin: 10px;
+        }
+        .notification {
+            color: green;
+            font-weight: bold;
+        }
+        pre {
+            background-color: #f8f8f8;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow: auto;
+            white-space: pre-wrap; /* Break lines */
+        }
+    </style>
+</head>
+<body>
+    <h2>Manual P2P Connection</h2>
+
+    <div>
+        <label>
+            <input type="checkbox" id="is-initiator" />
+            Apakah Anda adalah inisiator (Peer pertama)?
+        </label><br><br>
+
+        <label>
+            <input type="checkbox" id="video-toggle" />
+            Aktifkan Video
+        </label><br><br>
+
+        <label>
+            <input type="checkbox" id="audio-toggle" />
+            Aktifkan Audio
+        </label><br><br>
+
+        <button onclick="createPeer()">Create Peer</button><br><br>
+        
+        <h3>Signal Data</h3>
+        <pre id="signal-data"></pre>
+        <button onclick="copySignal()">Copy Signal</button>
+        
+        <textarea id="remote-signal" placeholder="Masukkan sinyal remote" rows="4" cols="50"></textarea><br><br>
+        <button onclick="connectPeer()">Connect to Peer</button>
+        
+        <div class="notification" id="connection-notification"></div>
+    </div>
+
+    <div>
+        <h3>Messages</h3>
+        <textarea id="messages" placeholder="Messages will appear here" rows="4" cols="50" readonly></textarea><br>
+        <input type="text" id="message-input" placeholder="Type a message" />
+        <button onclick="sendMessage()">Send Message</button>
+    </div>
+
+    <div>
+        <h3>Video</h3>
+        <video id="localVideo" autoplay muted></video>
+        <video id="remoteVideo" autoplay></video>
+    </div>
+
+    <div>
+        <button onclick="toggleVideo()">Toggle Video</button>
+        <button onclick="toggleAudio()">Toggle Audio</button>
+    </div>
+
+    <script>
+        let peer;
+        let localStream;
+
+        function createPeer() {
+            const isInitiator = document.getElementById('is-initiator').checked;
+            const videoEnabled = document.getElementById('video-toggle').checked;
+            const audioEnabled = document.getElementById('audio-toggle').checked;
+
+            if (peer) {
+                peer.destroy();
+            }
+
+            console.log('Is initiator:', isInitiator);
+
+            // Mendapatkan media stream dari webcam
+            navigator.mediaDevices.getUserMedia({
+                video: videoEnabled,
+                audio: audioEnabled
+            }).then(stream => {
+                localStream = stream;
+                document.getElementById('localVideo').srcObject = localStream;
+
+                // Membuat peer
+                peer = new SimplePeer({
+                    initiator: isInitiator,
+                    trickle: false,
+                    stream: localStream
+                });
+
+                peer.on('signal', data => {
+                    // Tampilkan sinyal di elemen pre
+                    document.getElementById('signal-data').textContent = JSON.stringify(data, null, 2); // Indentasi untuk tampilan yang lebih baik
+                    console.log("Signal data:", JSON.stringify(data));
+                });
+
+                peer.on('data', data => {
+                    document.getElementById('messages').value += 'Peer: ' + data + '\n';
+                });
+
+                peer.on('error', err => {
+                    console.error('Peer Error:', err);
+                });
+
+                peer.on('connect', () => {
+                    console.log("Connected to peer");
+                    document.getElementById('connection-notification').textContent = "Berhasil terhubung ke peer!";
+                });
+
+                peer.on('stream', remoteStream => {
+                    document.getElementById('remoteVideo').srcObject = remoteStream;
+                });
+            }).catch(err => {
+                console.error('Error accessing media devices.', err);
+            });
+        }
+
+        function connectPeer() {
+            try {
+                const signalData = JSON.parse(document.getElementById('remote-signal').value);
+                console.log("Connecting to peer with signal data:", signalData);
+                peer.signal(signalData);
+            } catch (error) {
+                console.error("Invalid remote signal data:", error);
+            }
+        }
+
+        function sendMessage() {
+            const message = document.getElementById('message-input').value;
+            if (peer && peer.connected) {
+                peer.send(message);
+                document.getElementById('messages').value += 'You: ' + message + '\n';
+            } else {
+                console.log("Peer is not connected.");
+            }
+        }
+
+        function copySignal() {
+            const signalData = document.getElementById('signal-data').textContent;
+            navigator.clipboard.writeText(signalData).then(() => {
+                console.log("Signal copied to clipboard");
+                alert("Signal copied to clipboard!");
+            }).catch(err => {
+                console.error('Error copying signal:', err);
+            });
+        }
+
+        function toggleVideo() {
+            const videoTrack = localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = !videoTrack.enabled; // Toggle video track
+                console.log("Video track toggled:", videoTrack.enabled);
+            }
+        }
+
+        function toggleAudio() {
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled; // Toggle audio track
+                console.log("Audio track toggled:", audioTrack.enabled);
+            }
+        }
+    </script>
+</body>
+</html>
